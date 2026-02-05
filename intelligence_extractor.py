@@ -129,8 +129,12 @@ class IntelligenceExtractor:
         urls = set()
         
         # Pattern 1: Full URLs with http/https
-        for match in re.finditer(r'(https?://[^\s<>"\'`\[\]{}|\\^]+)', text, re.IGNORECASE):
-            url = self._clean_extracted_value(match.group(1))
+        # Improved regex to capture more complex URLs while excluding trailing punctuation
+        url_pattern = r'https?://(?:[-\w.]|(?:%[\da-fA-F]{2}))+(?:/[-\w._~:/?#\[\]@!$&\'()*+,;=]*)?'
+        for match in re.finditer(url_pattern, text, re.IGNORECASE):
+            url = match.group(0)
+            # Clean trailing punctuation that might have been matched
+            url = url.rstrip('.,;:!?)">]')
             if url:
                 urls.add(url)
         
