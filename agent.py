@@ -103,6 +103,11 @@ CRITICAL RULES:
         history_text = self._format_conversation_history(conversation_history or [])
         msg_count = len(conversation_history) if conversation_history else 0
         stage_guidance = self._get_stage_guidance(msg_count)
+        
+        # Get language from metadata, default to English
+        language = "English"
+        if metadata and metadata.get("language"):
+            language = metadata.get("language")
 
         user_prompt = f"""Previous conversation:
 {history_text if history_text else "(First message)"}
@@ -111,7 +116,8 @@ Caller just said: "{current_message}"
 
 {stage_guidance}
 
-Respond as Shanti Devi in 1-2 SHORT sentences in English. Be natural. Your goal is to keep them talking and get them to reveal phone numbers, UPI IDs, or links."""
+IMPORTANT: Respond in {language} language.
+Respond as Shanti Devi in 1-2 SHORT sentences. Be natural. Your goal is to keep them talking and get them to reveal phone numbers, UPI IDs, or links."""
 
         try:
             response = self.client.chat.completions.create(
@@ -138,13 +144,19 @@ Respond as Shanti Devi in 1-2 SHORT sentences in English. Be natural. Your goal 
 
         except Exception as e:
             print(f"Agent response generation failed: {e}")
-            fallbacks = [
-                "I don't understand, can you explain again?",
-                "Wait, what do you mean? Which account?",
-                "Oh dear, this sounds very serious! What should I do?",
-                "Let me check... I'm not sure I understand properly.",
-                "Can you please give me a number to call you back?"
-            ]
+            # Language-aware fallbacks
+            if language.lower() == "hindi":
+                fallbacks = [
+                    "Mujhe samajh nahi aaya, kya aap explain kar sakte hain?",
+                    "Ek minute, kaunsa account?",
+                    "Bahut serious lag raha hai! Mujhe kya karna chahiye?",
+                ]
+            else:
+                fallbacks = [
+                    "I don't understand, can you explain again?",
+                    "Wait, what do you mean? Which account?",
+                    "Oh dear, this sounds very serious! What should I do?",
+                ]
             import random
             return random.choice(fallbacks)
 
