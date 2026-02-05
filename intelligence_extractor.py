@@ -14,7 +14,7 @@ class IntelligenceExtractor:
         self.api_key = api_key
         if api_key:
             self.client = Groq(api_key=api_key)
-            self.model = "llama-3.1-8b-instant"
+            self.model = "llama-3.3-70b-versatile"
         else:
             self.client = None
 
@@ -31,24 +31,42 @@ class IntelligenceExtractor:
         return list(set(accounts))
 
     def extract_upi_ids(self, text: str) -> List[str]:
-        """Extract UPI IDs (format: user@bankname)."""
-        pattern = r'\b[a-zA-Z0-9._-]+@[a-zA-Z0-9]+\b'
+        """Extract UPI IDs (format: user@bankname or user@anything)."""
+        # More permissive pattern to catch all UPI-like IDs
+        pattern = r'\b[a-zA-Z0-9._-]+@[a-zA-Z0-9._-]+\b'
         matches = re.findall(pattern, text.lower())
-        # Filter to likely UPI IDs (common bank suffixes)
-        upi_banks = ['upi', 'paytm', 'gpay', 'phonepe', 'ybl', 'oksbi', 'okaxis', 
-                     'okicici', 'okhdfcbank', 'axisbank', 'sbi', 'icici', 'hdfc',
-                     'ibl', 'axl', 'boi', 'pnb', 'kotak', 'indus', 'federal']
+        
+        # Known UPI bank suffixes
+        upi_banks = [
+            'upi', 'paytm', 'gpay', 'phonepe', 'ybl', 'oksbi', 'okaxis', 
+            'okicici', 'okhdfcbank', 'axisbank', 'sbi', 'icici', 'hdfc',
+            'ibl', 'axl', 'boi', 'pnb', 'kotak', 'indus', 'federal',
+            'freecharge', 'amazonpay', 'apl', 'waaxis', 'wahdfcbank',
+            'fam', 'ikwik', 'abfspay', 'pingpay', 'naviaxis', 'yesg',
+            # Also catch suspicious/fake ones
+            'fakebank', 'fake', 'fraud', 'scam', 'verify', 'secure',
+            'bank', 'pay', 'money', 'cash', 'wallet'
+        ]
+        
         upi_ids = []
         for match in matches:
-            suffix = match.split('@')[-1]
-            if any(bank in suffix for bank in upi_banks):
-                upi_ids.append(match)
+            # Skip obvious email domains
+            email_domains = ['gmail.com', 'yahoo.com', 'hotmail.com', 'outlook.com', 'email.com']
+            is_email = any(match.endswith(domain) for domain in email_domains)
+            
+            if not is_email:
+                # Check if it contains a known UPI suffix OR has UPI-like structure
+                suffix = match.split('@')[-1]
+                if any(bank in suffix for bank in upi_banks) or len(suffix) <= 15:
+                    upi_ids.append(match)
+        
         return list(set(upi_ids))
 
     def extract_phone_numbers(self, text: str) -> List[str]:
         """Extract Indian phone numbers."""
         patterns = [
             r'\+91[-\s]?\d{10}\b',  # +91 format
+            r'\+91[-\s]?\d{5}[-\s]?\d{5}\b',  # +91-98765-43210 format
             r'\b91[-\s]?\d{10}\b',  # 91 prefix
             r'\b0\d{10}\b',  # 0 prefix (landline/mobile)
             r'\b[6-9]\d{9}\b',  # Indian mobile (starts with 6-9)
@@ -57,6 +75,7 @@ class IntelligenceExtractor:
         for pattern in patterns:
             matches = re.findall(pattern, text)
             phones.extend(matches)
+        
         # Normalize to +91 format
         normalized = []
         for phone in phones:
@@ -73,7 +92,6 @@ class IntelligenceExtractor:
 
     def extract_phishing_links(self, text: str) -> List[str]:
         """Extract suspicious URLs/links."""
-        # URL pattern
         url_pattern = r'https?://[^\s<>"{}|\\^`\[\]]+'
         urls = re.findall(url_pattern, text)
         
@@ -84,6 +102,7 @@ class IntelligenceExtractor:
             r'goo\.gl/\S+',
             r't\.co/\S+',
             r'cutt\.ly/\S+',
+            r'shorturl\.\S+',
         ]
         for pattern in suspicious_patterns:
             matches = re.findall(pattern, text, re.IGNORECASE)
@@ -122,31 +141,32 @@ class IntelligenceExtractor:
     async def generate_agent_notes(self, messages: List[Dict]) -> str:
         """Generate summary notes about the scammer's behavior."""
         if not self.client:
-            # Fallback without LLM
             return "Scam conversation detected. Manual review recommended."
 
+        # Only include scammer messages for analysis
+        scammer_msgs = [m for m in messages if m.get('sender') == 'scammer']
         conversation = "\n".join([
-            f"{msg['sender']}: {msg['text']}" for msg in messages
+            f"Scammer: {msg['text']}" for msg in scammer_msgs[-8:]
         ])
 
-        prompt = f"""Analyze this scam conversation and provide a brief summary of the scammer's tactics and behavior.
+        prompt = f"""Analyze this scam conversation briefly.
 
-Conversation:
+Messages from scammer:
 {conversation}
 
-Provide a 1-2 sentence summary focusing on:
-- Type of scam (bank fraud, UPI fraud, phishing, etc.)
-- Tactics used (urgency, fear, impersonation, etc.)
-- Any notable patterns or intelligence
+Write a 2-3 sentence summary covering:
+1. Type of scam (bank fraud, UPI fraud, phishing)
+2. Tactics used (urgency, fear, impersonation)
+3. Key intelligence extracted (phone numbers, UPI IDs)
 
-Keep the response concise, under 100 words."""
+Be concise and factual."""
 
         try:
             response = self.client.chat.completions.create(
                 model=self.model,
                 messages=[{"role": "user", "content": prompt}],
                 temperature=0.3,
-                max_tokens=100
+                max_tokens=200  # Increased for complete response
             )
             return response.choices[0].message.content.strip()
         except Exception as e:
