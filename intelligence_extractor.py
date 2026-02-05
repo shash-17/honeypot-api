@@ -1,4 +1,4 @@
-"""Intelligence extraction from scam conversations."""
+"""Intelligence extraction from scam conversations - Robust version."""
 
 import re
 from typing import List, Dict
@@ -7,7 +7,7 @@ from groq import Groq
 
 
 class IntelligenceExtractor:
-    """Extracts actionable intelligence from scam messages."""
+    """Extracts actionable intelligence from scam messages with high accuracy."""
 
     def __init__(self, api_key: str = None):
         """Initialize extractor with optional Groq API key."""
@@ -21,147 +21,165 @@ class IntelligenceExtractor:
     def _normalize_text(self, text: str) -> str:
         """Normalize special characters in text."""
         # Replace various dash types with standard dash
-        text = text.replace('–', '-')  # en-dash
-        text = text.replace('—', '-')  # em-dash
-        text = text.replace('−', '-')  # minus sign
+        replacements = {
+            '–': '-',  # en-dash
+            '—': '-',  # em-dash
+            '−': '-',  # minus sign
+            ''': "'",  # curly quote
+            ''': "'",
+            '"': '"',
+            '"': '"',
+            '\u00a0': ' ',  # non-breaking space
+        }
+        for old, new in replacements.items():
+            text = text.replace(old, new)
         return text
+
+    def _clean_extracted_value(self, value: str) -> str:
+        """Clean trailing/leading punctuation from extracted values."""
+        return value.strip().rstrip('.,;:!?)"\'>').lstrip('<"\'(')
 
     def extract_bank_accounts(self, text: str) -> List[str]:
         """Extract Indian bank account numbers (9-18 digits)."""
         text = self._normalize_text(text)
+        accounts = set()
         
-        # Find 9-18 digit numbers that look like account numbers
-        pattern = r'\b(\d{9,18})\b'
-        matches = re.findall(pattern, text)
-        
-        # Also look for card-format numbers
-        card_pattern = r'\b(\d{4}[-\s]?\d{4}[-\s]?\d{4}[-\s]?\d{4})\b'
-        card_matches = re.findall(card_pattern, text)
-        matches.extend([re.sub(r'[-\s]', '', m) for m in card_matches])
-        
-        # Filter out likely phone numbers (10-digit starting with 6-9 or 91)
-        accounts = []
-        for m in matches:
-            # Skip if it's a 10-digit number starting with 6-9 (phone)
-            if len(m) == 10 and m[0] in '6789':
+        # Pattern: 9-18 digit sequences (account numbers)
+        for match in re.finditer(r'\b(\d{9,18})\b', text):
+            num = match.group(1)
+            # Filter out phone numbers (10-digit starting with 6-9)
+            if len(num) == 10 and num[0] in '6789':
                 continue
-            # Skip if it's 91 + 10 digits (phone with country code)
-            if len(m) == 12 and m.startswith('91') and m[2] in '6789':
+            # Filter out 91XXXXXXXXXX (phone with country code)
+            if len(num) == 12 and num.startswith('91') and num[2] in '6789':
                 continue
-            accounts.append(m)
+            accounts.add(num)
         
-        return list(set(accounts))
+        # Pattern: Card format XXXX-XXXX-XXXX-XXXX or XXXX XXXX XXXX XXXX
+        for match in re.finditer(r'\b(\d{4})[-\s]?(\d{4})[-\s]?(\d{4})[-\s]?(\d{4})\b', text):
+            accounts.add(''.join(match.groups()))
+        
+        return list(accounts)
 
     def extract_upi_ids(self, text: str) -> List[str]:
-        """Extract UPI IDs (format: something@something)."""
+        """Extract UPI IDs (format: something@bankhandle)."""
         text = self._normalize_text(text.lower())
-        
-        # Match any word@word pattern
-        pattern = r'([a-zA-Z0-9][a-zA-Z0-9._-]*@[a-zA-Z0-9][a-zA-Z0-9._-]*)'
-        matches = re.findall(pattern, text)
+        upi_ids = set()
         
         # Email TLDs to filter out
-        email_tlds = ['.com', '.org', '.net', '.in', '.co', '.io', '.edu', '.gov', '.info', '.biz']
+        email_tlds = {'.com', '.org', '.net', '.in', '.co', '.io', '.edu', 
+                      '.gov', '.info', '.biz', '.me', '.us', '.uk', '.au'}
         
-        # Common email domains to filter out  
-        email_domains = [
-            'gmail', 'yahoo', 'hotmail', 'outlook', 'email', 'mail', 
-            'protonmail', 'icloud', 'live', 'msn', 'aol', 'rediffmail',
-            'zoho', 'yandex', 'tutanota', 'fastmail', 'pm', 'hey'
-        ]
+        # Common email providers to filter out  
+        email_providers = {'gmail', 'yahoo', 'hotmail', 'outlook', 'email', 
+                          'mail', 'protonmail', 'icloud', 'live', 'msn', 
+                          'aol', 'rediffmail', 'zoho', 'yandex'}
         
-        upi_ids = []
-        for match in matches:
-            # Strip trailing punctuation
-            match = match.rstrip('.,;:!?')
-            suffix = match.split('@')[-1]
+        # Match word@word patterns
+        for match in re.finditer(r'([a-zA-Z0-9][a-zA-Z0-9._-]*@[a-zA-Z0-9][a-zA-Z0-9._-]*)', text):
+            upi = self._clean_extracted_value(match.group(1))
             
-            # Skip if it looks like an email (has common TLD)
+            if not upi or '@' not in upi:
+                continue
+                
+            suffix = upi.split('@')[-1]
+            
+            # Skip if has email TLD
             if any(suffix.endswith(tld) for tld in email_tlds):
                 continue
             
-            # Skip if domain part matches common email providers
-            if any(domain in suffix for domain in email_domains):
+            # Skip if matches email provider
+            if any(provider in suffix for provider in email_providers):
                 continue
             
-            upi_ids.append(match)
+            upi_ids.add(upi)
         
-        return list(set(upi_ids))
+        return list(upi_ids)
 
     def extract_phone_numbers(self, text: str) -> List[str]:
-        """Extract Indian phone numbers."""
+        """Extract Indian phone numbers in various formats."""
         text = self._normalize_text(text)
+        phones = set()
         
-        phones = []
+        # Pattern 1: +91 with 10 digits (various formats)
+        for match in re.finditer(r'\+91[-\s.]?(\d{5})[-\s.]?(\d{5})', text):
+            phones.add('+91' + match.group(1) + match.group(2))
         
-        # Pattern 1: +91 followed by 10 digits (with optional spaces/dashes)
-        pattern1 = r'\+91[-\s]?(\d{5})[-\s]?(\d{5})'
-        for match in re.finditer(pattern1, text):
-            phones.append('+91' + match.group(1) + match.group(2))
+        for match in re.finditer(r'\+91[-\s.]?(\d{10})\b', text):
+            phones.add('+91' + match.group(1))
         
-        # Pattern 2: +91 followed by 10 digits (continuous)
-        pattern2 = r'\+91[-\s]?(\d{10})\b'
-        for match in re.finditer(pattern2, text):
-            phones.append('+91' + match.group(1))
+        # Pattern 2: 91 prefix (without +)
+        for match in re.finditer(r'\b91[-\s.]?(\d{10})\b', text):
+            phones.add('+91' + match.group(1))
         
-        # Pattern 3: 91 followed by 10 digits
-        pattern3 = r'\b91[-\s]?(\d{10})\b'
-        for match in re.finditer(pattern3, text):
-            phones.append('+91' + match.group(1))
+        # Pattern 3: 0 prefix (landline format)
+        for match in re.finditer(r'\b0(\d{10})\b', text):
+            phones.add('+91' + match.group(1))
         
-        # Pattern 4: 10-digit Indian mobile (starting with 6-9)
-        pattern4 = r'\b([6-9]\d{9})\b'
-        for match in re.finditer(pattern4, text):
-            # Avoid matching if it's part of a longer number
-            phones.append('+91' + match.group(1))
+        # Pattern 4: Standalone 10-digit Indian mobile (starts with 6-9)
+        for match in re.finditer(r'(?<!\d)([6-9]\d{9})(?!\d)', text):
+            phones.add('+91' + match.group(1))
         
-        return list(set(phones))
+        return list(phones)
 
     def extract_phishing_links(self, text: str) -> List[str]:
-        """Extract URLs/links from text."""
+        """Extract URLs and phishing links."""
         text = self._normalize_text(text)
+        urls = set()
         
-        urls = []
+        # Pattern 1: Full URLs with http/https
+        for match in re.finditer(r'(https?://[^\s<>"\'`\[\]{}|\\^]+)', text, re.IGNORECASE):
+            url = self._clean_extracted_value(match.group(1))
+            if url:
+                urls.add(url)
         
-        # Pattern 1: http:// or https:// URLs
-        pattern1 = r'(https?://[^\s<>"\']+)'
-        for match in re.finditer(pattern1, text, re.IGNORECASE):
-            url = match.group(1).rstrip('.,;:!?)\'\"')
-            urls.append(url)
-        
-        # Pattern 2: www. URLs (add https://)
-        pattern2 = r'\b(www\.[^\s<>"\']+)'
-        for match in re.finditer(pattern2, text, re.IGNORECASE):
-            url = match.group(1).rstrip('.,;:!?)\'\"')
-            urls.append('https://' + url)
+        # Pattern 2: www. URLs without protocol
+        for match in re.finditer(r'\b(www\.[^\s<>"\'`\[\]{}|\\^]+)', text, re.IGNORECASE):
+            url = self._clean_extracted_value(match.group(1))
+            if url:
+                urls.add('https://' + url)
         
         # Pattern 3: Common URL shorteners
-        shorteners = ['bit.ly', 'tinyurl.com', 'goo.gl', 't.co', 'cutt.ly', 'shorturl.at']
+        shorteners = ['bit.ly', 'tinyurl.com', 'goo.gl', 't.co', 'cutt.ly', 
+                      'shorturl.at', 'rb.gy', 'ow.ly', 'is.gd', 'v.gd']
         for shortener in shorteners:
             pattern = rf'({re.escape(shortener)}/[^\s<>"\']+)'
             for match in re.finditer(pattern, text, re.IGNORECASE):
-                url = match.group(1).rstrip('.,;:!?)\'\"')
-                if not url.startswith('http'):
-                    url = 'https://' + url
-                urls.append(url)
+                url = self._clean_extracted_value(match.group(1))
+                if url:
+                    urls.add('https://' + url if not url.startswith('http') else url)
         
-        return list(set(urls))
+        return list(urls)
 
     def extract_suspicious_keywords(self, text: str) -> List[str]:
-        """Extract suspicious keywords from text."""
-        suspicious_words = [
-            "urgent", "immediately", "verify", "blocked", "suspended",
-            "otp", "pin", "password", "cvv", "expire", "kyc", "pan",
-            "aadhar", "lottery", "prize", "winner", "refund", "cashback",
-            "claim", "bonus", "reward", "unauthorized", "warning", "freeze",
-            "compromised", "secure", "identity", "verify now", "account blocked"
+        """Extract suspicious/scam-related keywords."""
+        keywords = [
+            # Urgency
+            "urgent", "immediately", "right now", "within minutes", "hurry",
+            # Threats
+            "blocked", "suspended", "freeze", "locked", "terminated", "deactivated",
+            # Verification
+            "verify", "confirm", "validate", "authenticate",
+            # Credentials
+            "otp", "pin", "password", "cvv", "mpin", "atm pin",
+            # Identity
+            "kyc", "pan", "aadhar", "identity", "pan card",
+            # Money
+            "refund", "cashback", "prize", "lottery", "winner", "reward", "bonus",
+            # Actions
+            "claim", "redeem", "collect", "receive",
+            # Alerts
+            "warning", "alert", "security", "unauthorized", "suspicious activity",
+            # State
+            "compromised", "hacked", "expired", "expiring"
         ]
         
         text_lower = text.lower()
         found = []
-        for word in suspicious_words:
-            if word in text_lower:
-                found.append(word)
+        
+        for keyword in keywords:
+            if keyword in text_lower:
+                found.append(keyword)
         
         return list(set(found))
 
@@ -180,18 +198,17 @@ class IntelligenceExtractor:
 
     async def generate_agent_notes(self, messages: List[Dict], intelligence: ExtractedIntelligence = None) -> str:
         """Generate factual summary notes about the scam conversation."""
-        # Extract intelligence from messages if not provided
+        # Extract intelligence if not provided
         if intelligence is None:
             intelligence = self.extract_all(messages)
         
-        # Build factual summary based on extracted data
         notes_parts = []
+        keywords = intelligence.suspiciousKeywords
         
         # Determine scam type based on keywords
-        keywords = intelligence.suspiciousKeywords
-        if any(k in keywords for k in ['otp', 'pin', 'password', 'cvv']):
+        if any(k in keywords for k in ['otp', 'pin', 'password', 'cvv', 'mpin']):
             scam_type = "OTP/credential theft scam"
-        elif any(k in keywords for k in ['blocked', 'suspended', 'freeze']):
+        elif any(k in keywords for k in ['blocked', 'suspended', 'freeze', 'locked']):
             scam_type = "Account blocking fraud"
         elif any(k in keywords for k in ['lottery', 'prize', 'winner']):
             scam_type = "Lottery/prize scam"
@@ -204,28 +221,28 @@ class IntelligenceExtractor:
         
         notes_parts.append(f"Scam type: {scam_type}.")
         
-        # Tactics used
+        # Determine tactics
         tactics = []
-        if any(k in keywords for k in ['urgent', 'immediately']):
+        if any(k in keywords for k in ['urgent', 'immediately', 'right now', 'hurry']):
             tactics.append("urgency")
-        if any(k in keywords for k in ['blocked', 'suspended', 'warning']):
+        if any(k in keywords for k in ['blocked', 'suspended', 'warning', 'freeze', 'locked']):
             tactics.append("fear/threats")
-        if any(k in keywords for k in ['verify', 'identity', 'secure']):
+        if any(k in keywords for k in ['verify', 'identity', 'security', 'authenticate']):
             tactics.append("impersonation")
         
         if tactics:
-            notes_parts.append(f"Tactics used: {', '.join(tactics)}.")
+            notes_parts.append(f"Tactics: {', '.join(tactics)}.")
         
-        # Extracted intelligence
+        # List extracted intelligence
         intel_parts = []
         if intelligence.phoneNumbers:
-            intel_parts.append(f"phone: {', '.join(intelligence.phoneNumbers[:2])}")
+            intel_parts.append(f"Phone: {', '.join(intelligence.phoneNumbers[:3])}")
         if intelligence.upiIds:
-            intel_parts.append(f"UPI: {', '.join(intelligence.upiIds[:2])}")
+            intel_parts.append(f"UPI: {', '.join(intelligence.upiIds[:3])}")
         if intelligence.phishingLinks:
-            intel_parts.append(f"link: {intelligence.phishingLinks[0]}")
+            intel_parts.append(f"URL: {', '.join(intelligence.phishingLinks[:2])}")
         if intelligence.bankAccounts:
-            intel_parts.append(f"account: {intelligence.bankAccounts[0]}")
+            intel_parts.append(f"Account: {', '.join(intelligence.bankAccounts[:2])}")
         
         if intel_parts:
             notes_parts.append(f"Extracted: {'; '.join(intel_parts)}.")
