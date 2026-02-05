@@ -37,15 +37,16 @@ async def lifespan(app: FastAPI):
     """Initialize components on startup."""
     global scam_detector, honeypot_agent, intel_extractor
     
-    gemini_api_key = os.getenv("GEMINI_API_KEY")
-    if not gemini_api_key:
-        raise RuntimeError("GEMINI_API_KEY environment variable not set")
+    # Support both GROQ_API_KEY and GEMINI_API_KEY for backward compatibility
+    api_key = os.getenv("GROQ_API_KEY") or os.getenv("GEMINI_API_KEY")
+    if not api_key:
+        raise RuntimeError("GROQ_API_KEY environment variable not set")
     
-    scam_detector = ScamDetector(gemini_api_key)
-    honeypot_agent = HoneypotAgent(gemini_api_key)
-    intel_extractor = IntelligenceExtractor(gemini_api_key)
+    scam_detector = ScamDetector(api_key)
+    honeypot_agent = HoneypotAgent(api_key)
+    intel_extractor = IntelligenceExtractor(api_key)
     
-    print("🍯 Agentic Honey-Pot API initialized successfully")
+    print("🍯 Agentic Honey-Pot API initialized successfully (Groq)")
     yield
     print("🍯 Agentic Honey-Pot API shutting down")
 

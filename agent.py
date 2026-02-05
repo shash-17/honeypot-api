@@ -1,7 +1,7 @@
 """AI Agent for engaging with scammers in a human-like manner."""
 
 from typing import List, Dict
-from google import genai
+from groq import Groq
 
 
 class HoneypotAgent:
@@ -35,10 +35,10 @@ IMPORTANT RULES:
 
 Your name is Shanti Devi, a 62-year-old retired school teacher living in Delhi. You are not very tech-savvy but trying to learn. You have a savings account and use UPI sometimes for paying bills."""
 
-    def __init__(self, gemini_api_key: str):
-        """Initialize agent with Gemini API key."""
-        self.client = genai.Client(api_key=gemini_api_key)
-        self.model_id = "gemini-2.0-flash"
+    def __init__(self, api_key: str):
+        """Initialize agent with Groq API key."""
+        self.client = Groq(api_key=api_key)
+        self.model = "llama-3.1-8b-instant"  # Fast and free
 
     def _format_conversation_history(self, history: List[Dict]) -> str:
         """Format conversation history for the prompt."""
@@ -100,11 +100,13 @@ Remember: You want to keep them talking and extract information without revealin
 Your response (just the message text, no prefix):"""
 
         try:
-            response = self.client.models.generate_content(
-                model=self.model_id,
-                contents=prompt
+            response = self.client.chat.completions.create(
+                model=self.model,
+                messages=[{"role": "user", "content": prompt}],
+                temperature=0.7,
+                max_tokens=150
             )
-            reply = response.text.strip()
+            reply = response.choices[0].message.content.strip()
             
             # Clean up any accidental prefixes
             prefixes_to_remove = ["Shanti:", "Shanti Devi:", "You:", "Response:"]

@@ -3,18 +3,18 @@
 import re
 from typing import List, Dict
 from models import ExtractedIntelligence
-from google import genai
+from groq import Groq
 
 
 class IntelligenceExtractor:
     """Extracts actionable intelligence from scam messages."""
 
-    def __init__(self, gemini_api_key: str = None):
-        """Initialize extractor with optional Gemini API key."""
-        self.gemini_api_key = gemini_api_key
-        if gemini_api_key:
-            self.client = genai.Client(api_key=gemini_api_key)
-            self.model_id = "gemini-2.0-flash"
+    def __init__(self, api_key: str = None):
+        """Initialize extractor with optional Groq API key."""
+        self.api_key = api_key
+        if api_key:
+            self.client = Groq(api_key=api_key)
+            self.model = "llama-3.1-8b-instant"
         else:
             self.client = None
 
@@ -142,11 +142,13 @@ Provide a 1-2 sentence summary focusing on:
 Keep the response concise, under 100 words."""
 
         try:
-            response = self.client.models.generate_content(
-                model=self.model_id,
-                contents=prompt
+            response = self.client.chat.completions.create(
+                model=self.model,
+                messages=[{"role": "user", "content": prompt}],
+                temperature=0.3,
+                max_tokens=100
             )
-            return response.text.strip()
+            return response.choices[0].message.content.strip()
         except Exception as e:
             print(f"Failed to generate agent notes: {e}")
             return "Scam conversation detected. Automated analysis unavailable."

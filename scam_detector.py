@@ -2,8 +2,7 @@
 
 import re
 from typing import List, Dict, Tuple
-from google import genai
-from google.genai import types
+from groq import Groq
 
 # Suspicious keywords and phrases commonly used in scams
 SCAM_KEYWORDS = [
@@ -32,10 +31,10 @@ SCAM_PATTERNS = [
 class ScamDetector:
     """Detects scam intent in messages using LLM and patterns."""
 
-    def __init__(self, gemini_api_key: str):
-        """Initialize with Gemini API key."""
-        self.client = genai.Client(api_key=gemini_api_key)
-        self.model_id = "gemini-2.0-flash"
+    def __init__(self, api_key: str):
+        """Initialize with Groq API key."""
+        self.client = Groq(api_key=api_key)
+        self.model = "llama-3.1-8b-instant"  # Fast and free
 
     def detect_keywords(self, text: str) -> List[str]:
         """Find scam-related keywords in text."""
@@ -89,11 +88,13 @@ REASONING: [Brief explanation]
 Be conservative - if unsure, lean towards detecting as scam to protect users."""
 
         try:
-            response = self.client.models.generate_content(
-                model=self.model_id,
-                contents=prompt
+            response = self.client.chat.completions.create(
+                model=self.model,
+                messages=[{"role": "user", "content": prompt}],
+                temperature=0.3,
+                max_tokens=200
             )
-            response_text = response.text
+            response_text = response.choices[0].message.content
 
             # Parse response
             is_scam = "IS_SCAM: YES" in response_text.upper()
