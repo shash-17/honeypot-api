@@ -1,9 +1,14 @@
 """GUVI callback for sending final results."""
 
+import os
 import httpx
 from models import GUVICallbackPayload, ExtractedIntelligence
 
-GUVI_CALLBACK_URL = "https://hackathon.guvi.in/api/updateHoneyPotFinalResult"
+# Configurable callback URL with default
+GUVI_CALLBACK_URL = os.getenv(
+    "GUVI_CALLBACK_URL", 
+    "https://hackathon.guvi.in/api/updateHoneyPotFinalResult"
+)
 
 
 async def send_final_result(

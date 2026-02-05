@@ -37,8 +37,8 @@ async def lifespan(app: FastAPI):
     """Initialize components on startup."""
     global scam_detector, honeypot_agent, intel_extractor
     
-    # Support both GROQ_API_KEY and GEMINI_API_KEY for backward compatibility
-    api_key = os.getenv("GROQ_API_KEY") or os.getenv("GEMINI_API_KEY")
+    # Use GROQ_API_KEY
+    api_key = os.getenv("GROQ_API_KEY")
     if not api_key:
         raise RuntimeError("GROQ_API_KEY environment variable not set")
     
@@ -46,7 +46,7 @@ async def lifespan(app: FastAPI):
     honeypot_agent = HoneypotAgent(api_key)
     intel_extractor = IntelligenceExtractor(api_key)
     
-    print("🍯 Agentic Honey-Pot API initialized successfully (Groq)")
+    print("🍯 Agentic Honey-Pot API initialized successfully (Groq LLM)")
     yield
     print("🍯 Agentic Honey-Pot API shutting down")
 
@@ -121,6 +121,20 @@ async def analyze_message(
     message = request.message
     history = request.conversationHistory
     metadata = request.metadata
+
+    # Bug 6 fix: Validate session_id
+    if not session_id or not session_id.strip():
+        raise HTTPException(
+            status_code=400,
+            detail="sessionId is required and cannot be empty"
+        )
+
+    # Validate message text
+    if not message.text or not message.text.strip():
+        raise HTTPException(
+            status_code=400,
+            detail="message.text is required and cannot be empty"
+        )
 
     # Get or create session
     session = session_manager.get_or_create(session_id)
@@ -208,9 +222,32 @@ async def analyze_message(
         else:
             print(f"❌ Callback failed for session {session_id}: {callback_result}")
 
+    # Calculate conversation stage for metrics
+    msg_count = session.total_messages
+    if msg_count == 0:
+        stage = 1
+    elif msg_count <= 2:
+        stage = 2
+    elif msg_count <= 5:
+        stage = 3
+    elif msg_count <= 8:
+        stage = 4
+    elif msg_count <= 12:
+        stage = 5
+    elif msg_count <= 16:
+        stage = 6
+    else:
+        stage = 7
+
+    # Return complete response with all metrics for evaluation
     return AnalyzeResponse(
         status="success",
-        reply=agent_reply
+        reply=agent_reply,
+        sessionId=session_id,
+        scamDetected=session.scam_detected,
+        extractedIntelligence=session.extracted_intelligence,
+        totalMessagesExchanged=session.total_messages,
+        conversationStage=stage
     )
 
 

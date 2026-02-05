@@ -17,6 +17,7 @@ class IntelligenceExtractor:
             self.model = "llama-3.3-70b-versatile"
         else:
             self.client = None
+            self.model = None
 
     def _normalize_text(self, text: str) -> str:
         """Normalize special characters in text."""

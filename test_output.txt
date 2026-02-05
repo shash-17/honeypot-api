@@ -1,0 +1,38 @@
+﻿=== MESSAGE 1 ===
+SCAMMER: URGENT! Your SBI account blocked due to KYC. Call 9876543210!
+SHANTI DEVI: Wait, my phone is very slow today...
+[Stage: 2 | Total: 2 | Scam: True]
+
+=== MESSAGE 2 ===
+SCAMMER: I am Rahul from SBI Mumbai. Need to verify Rs 50000 suspicious transaction.
+SHANTI DEVI: Wait, my phone is very slow today...
+[Stage: 3 | Total: 4 | Scam: True]
+
+=== MESSAGE 3 ===
+SCAMMER: Send Rs 500 to UPI sbi.verify@ybl to unblock account.
+SHANTI DEVI: Wait, my phone is very slow today...
+[Stage: 4 | Total: 6 | Scam: True]
+
+=== MESSAGE 4 ===
+SCAMMER: If you dont do in 30 min, FIR will be filed!
+SHANTI DEVI: One minute, let me find my glasses...
+[Stage: 4 | Total: 8 | Scam: True]
+
+=== MESSAGE 5 ===
+SCAMMER: Visit http://sbi-kyc.fake.com to complete KYC
+SHANTI DEVI: I don't understand, can you explain again?
+[Stage: 5 | Total: 10 | Scam: True]
+
+=== MESSAGE 6 ===
+SCAMMER: Share account 9876543210123456 and OTP for verification
+SHANTI DEVI: Oh dear, this is serious! Which bank did you say?
+[Stage: 5 | Total: 12 | Scam: True]
+
+=== FINAL RESULTS ===
+Total Messages: 12
+Scam Detected: True
+UPI IDs: sbi.verify@ybl
+Phones: +919876543210
+Bank Accounts: 9876543210123456
+Links: http://sbi-kyc.fake.com
+Keywords: otp, verify, blocked, locked, urgent, kyc

@@ -38,7 +38,7 @@ class ScamDetector:
     def __init__(self, api_key: str):
         """Initialize with Groq API key."""
         self.client = Groq(api_key=api_key)
-        self.model = "llama-3.3-70b-versatile"  # Better accuracy
+        self.model = "llama-3.3-70b-versatile"
 
     def detect_keywords(self, text: str) -> List[str]:
         """Find scam-related keywords in text."""
@@ -87,13 +87,13 @@ CONFIDENCE: 0.0 to 1.0
 REASON: One sentence explanation"""
 
         try:
-            response = self.client.chat.completions.create(
+            completion = self.client.chat.completions.create(
                 model=self.model,
                 messages=[{"role": "user", "content": prompt}],
                 temperature=0.2,
                 max_tokens=100
             )
-            response_text = response.choices[0].message.content
+            response_text = completion.choices[0].message.content
 
             is_scam = "IS_SCAM: YES" in response_text.upper()
             

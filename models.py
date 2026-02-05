@@ -33,6 +33,14 @@ class AnalyzeResponse(BaseModel):
     """Response from /analyze endpoint."""
     status: str = Field(..., description="'success' or 'error'")
     reply: str = Field(..., description="Agent's response message")
+    sessionId: Optional[str] = Field(None, description="Session identifier for tracking")
+    scamDetected: Optional[bool] = Field(None, description="Whether scam was detected")
+    extractedIntelligence: Optional["ExtractedIntelligence"] = Field(
+        None, description="Intelligence extracted so far"
+    )
+    # Engagement metrics for evaluation
+    totalMessagesExchanged: Optional[int] = Field(None, description="Total messages in session")
+    conversationStage: Optional[int] = Field(None, description="Current conversation stage (1-7)")
 
 
 class ExtractedIntelligence(BaseModel):
