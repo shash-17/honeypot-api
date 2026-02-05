@@ -186,8 +186,11 @@ async def analyze_message(
 
     # Send callback if conversation should end and we detected a scam
     if should_end and session.scam_detected and not session.callback_sent:
-        # Generate agent notes
-        agent_notes = await intel_extractor.generate_agent_notes(session.messages)
+        # Generate agent notes with extracted intelligence
+        agent_notes = await intel_extractor.generate_agent_notes(
+            session.messages, 
+            session.extracted_intelligence
+        )
         session_manager.set_agent_notes(session_id, agent_notes)
         
         # Send to GUVI

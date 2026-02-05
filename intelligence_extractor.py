@@ -176,39 +176,56 @@ class IntelligenceExtractor:
             suspiciousKeywords=self.extract_suspicious_keywords(all_text)
         )
 
-    async def generate_agent_notes(self, messages: List[Dict]) -> str:
-        """Generate summary notes about the scammer's behavior."""
-        if not self.client:
-            return "Scam conversation detected. Manual review recommended."
-
-        # Get scammer messages only
-        scammer_msgs = [m for m in messages if m.get('sender') == 'scammer']
-        if not scammer_msgs:
-            scammer_msgs = messages
-            
-        conversation = "\n".join([
-            f"- {msg.get('text', '')}" for msg in scammer_msgs[-6:]
-        ])
-
-        prompt = f"""Briefly analyze this scam attempt:
-
-{conversation}
-
-Write 2-3 sentences describing:
-1. Type of scam
-2. Tactics used
-3. Intelligence gathered (phone, UPI, links)
-
-Be factual and concise."""
-
-        try:
-            response = self.client.chat.completions.create(
-                model=self.model,
-                messages=[{"role": "user", "content": prompt}],
-                temperature=0.3,
-                max_tokens=150
-            )
-            return response.choices[0].message.content.strip()
-        except Exception as e:
-            print(f"Failed to generate agent notes: {e}")
-            return "Scam conversation detected involving potential financial fraud."
+    async def generate_agent_notes(self, messages: List[Dict], intelligence: ExtractedIntelligence = None) -> str:
+        """Generate factual summary notes about the scam conversation."""
+        # Extract intelligence from messages if not provided
+        if intelligence is None:
+            intelligence = self.extract_all(messages)
+        
+        # Build factual summary based on extracted data
+        notes_parts = []
+        
+        # Determine scam type based on keywords
+        keywords = intelligence.suspiciousKeywords
+        if any(k in keywords for k in ['otp', 'pin', 'password', 'cvv']):
+            scam_type = "OTP/credential theft scam"
+        elif any(k in keywords for k in ['blocked', 'suspended', 'freeze']):
+            scam_type = "Account blocking fraud"
+        elif any(k in keywords for k in ['lottery', 'prize', 'winner']):
+            scam_type = "Lottery/prize scam"
+        elif any(k in keywords for k in ['refund', 'cashback']):
+            scam_type = "Refund/cashback fraud"
+        elif any(k in keywords for k in ['kyc', 'pan', 'aadhar']):
+            scam_type = "KYC verification scam"
+        else:
+            scam_type = "Financial fraud attempt"
+        
+        notes_parts.append(f"Scam type: {scam_type}.")
+        
+        # Tactics used
+        tactics = []
+        if any(k in keywords for k in ['urgent', 'immediately']):
+            tactics.append("urgency")
+        if any(k in keywords for k in ['blocked', 'suspended', 'warning']):
+            tactics.append("fear/threats")
+        if any(k in keywords for k in ['verify', 'identity', 'secure']):
+            tactics.append("impersonation")
+        
+        if tactics:
+            notes_parts.append(f"Tactics used: {', '.join(tactics)}.")
+        
+        # Extracted intelligence
+        intel_parts = []
+        if intelligence.phoneNumbers:
+            intel_parts.append(f"phone: {', '.join(intelligence.phoneNumbers[:2])}")
+        if intelligence.upiIds:
+            intel_parts.append(f"UPI: {', '.join(intelligence.upiIds[:2])}")
+        if intelligence.phishingLinks:
+            intel_parts.append(f"link: {intelligence.phishingLinks[0]}")
+        if intelligence.bankAccounts:
+            intel_parts.append(f"account: {intelligence.bankAccounts[0]}")
+        
+        if intel_parts:
+            notes_parts.append(f"Extracted: {'; '.join(intel_parts)}.")
+        
+        return " ".join(notes_parts)
