@@ -72,6 +72,8 @@ class IntelligenceExtractor:
         
         upi_ids = []
         for match in matches:
+            # Strip trailing punctuation
+            match = match.rstrip('.,;:!?')
             suffix = match.split('@')[-1]
             
             # Skip if it looks like an email (has common TLD)
