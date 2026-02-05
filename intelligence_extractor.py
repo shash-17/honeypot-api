@@ -128,15 +128,18 @@ class IntelligenceExtractor:
         text = self._normalize_text(text)
         urls = set()
         
-        # Pattern 1: Full URLs with http/https
-        # Improved regex to capture more complex URLs while excluding trailing punctuation
-        url_pattern = r'https?://(?:[-\w.]|(?:%[\da-fA-F]{2}))+(?:/[-\w._~:/?#\[\]@!$&\'()*+,;=]*)?'
+        # Pattern 1: Simple, aggressive regex for URLs
+        # Matches http/https followed by non-whitespace characters
+        print(f"DEBUG: Extracting URLs from text: {text[:50]}...")
+        url_pattern = r'https?://[^\s<>"]+'
         for match in re.finditer(url_pattern, text, re.IGNORECASE):
             url = match.group(0)
-            # Clean trailing punctuation that might have been matched
+            print(f"DEBUG: Regex matched: {url}")
+            # Clean trailing punctuation
             url = url.rstrip('.,;:!?)">]')
             if url:
                 urls.add(url)
+                print(f"DEBUG: Added URL: {url}")
         
         # Pattern 2: www. URLs without protocol
         for match in re.finditer(r'\b(www\.[^\s<>"\'`\[\]{}|\\^]+)', text, re.IGNORECASE):

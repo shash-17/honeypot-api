@@ -240,6 +240,7 @@ async def analyze_message(
         stage = 7
 
     # Return complete response with all metrics for evaluation
+    print(f"DEBUG: Final Intelligence for session {session_id}: {session.extracted_intelligence.model_dump()}")
     return AnalyzeResponse(
         status="success",
         reply=agent_reply,
